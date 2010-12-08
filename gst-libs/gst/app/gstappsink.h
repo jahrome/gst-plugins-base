@@ -135,6 +135,11 @@ void            gst_app_sink_set_callbacks    (GstAppSink * appsink,
 					       gpointer user_data,
 					       GDestroyNotify notify);
 
+void            gst_app_sink_set_callbacks    (GstAppSink * appsink,
+                                               GstAppSinkCallbacks *callbacks,
+					       gpointer user_data,
+					       GDestroyNotify notify);
+
 G_END_DECLS
 
 #endif

@@ -66,7 +66,7 @@
 
 #include <glib.h>
 
-#define EXPORT G_GNUC_INTERNAL
+#define G_GNUC_INTERNAL
 
 static inline void *
 speex_alloc (int size)
@@ -90,9 +90,9 @@ speex_free (void *ptr)
 #include "arch.h"
 #else /* OUTSIDE_SPEEX */
 
-#include "../include/speex/speex_resampler.h"
+#include <speex_resampler.h>
 #include "arch.h"
-#include "os_support.h"
+#include <os_support.h>
 #endif /* OUTSIDE_SPEEX */
 
 #include <math.h>
@@ -871,7 +871,7 @@ update_filter (SpeexResamplerState * st)
 
 }
 
-EXPORT SpeexResamplerState *
+SpeexResamplerState *
 speex_resampler_init (spx_uint32_t nb_channels, spx_uint32_t in_rate,
     spx_uint32_t out_rate, int quality, int *err)
 {
@@ -879,7 +879,7 @@ speex_resampler_init (spx_uint32_t nb_channels, spx_uint32_t in_rate,
       out_rate, quality, err);
 }
 
-EXPORT SpeexResamplerState *
+SpeexResamplerState *
 speex_resampler_init_frac (spx_uint32_t nb_channels, spx_uint32_t ratio_num,
     spx_uint32_t ratio_den, spx_uint32_t in_rate, spx_uint32_t out_rate,
     int quality, int *err)
@@ -939,7 +939,7 @@ speex_resampler_init_frac (spx_uint32_t nb_channels, spx_uint32_t ratio_num,
   return st;
 }
 
-EXPORT void
+void
 speex_resampler_destroy (SpeexResamplerState * st)
 {
   speex_free (st->mem);
@@ -1003,18 +1003,18 @@ speex_resampler_magic (SpeexResamplerState * st, spx_uint32_t channel_index,
 }
 
 #ifdef FIXED_POINT
-EXPORT int
+int
 speex_resampler_process_int (SpeexResamplerState * st,
     spx_uint32_t channel_index, const spx_int16_t * in, spx_uint32_t * in_len,
     spx_int16_t * out, spx_uint32_t * out_len)
 #else
 #ifdef DOUBLE_PRECISION
-EXPORT int
+int
 speex_resampler_process_float (SpeexResamplerState * st,
     spx_uint32_t channel_index, const double *in, spx_uint32_t * in_len,
     double *out, spx_uint32_t * out_len)
 #else
-EXPORT int
+int
 speex_resampler_process_float (SpeexResamplerState * st,
     spx_uint32_t channel_index, const float *in, spx_uint32_t * in_len,
     float *out, spx_uint32_t * out_len)
@@ -1057,12 +1057,12 @@ speex_resampler_process_float (SpeexResamplerState * st,
 }
 
 #ifdef FIXED_POINT
-EXPORT int
+int
 speex_resampler_process_float (SpeexResamplerState * st,
     spx_uint32_t channel_index, const float *in, spx_uint32_t * in_len,
     float *out, spx_uint32_t * out_len)
 #else
-EXPORT int
+int
 speex_resampler_process_int (SpeexResamplerState * st,
     spx_uint32_t channel_index, const spx_int16_t * in, spx_uint32_t * in_len,
     spx_int16_t * out, spx_uint32_t * out_len)
@@ -1138,12 +1138,12 @@ speex_resampler_process_int (SpeexResamplerState * st,
 }
 
 #ifdef DOUBLE_PRECISION
-EXPORT int
+int
 speex_resampler_process_interleaved_float (SpeexResamplerState * st,
     const double *in, spx_uint32_t * in_len, double *out,
     spx_uint32_t * out_len)
 #else
-EXPORT int
+int
 speex_resampler_process_interleaved_float (SpeexResamplerState * st,
     const float *in, spx_uint32_t * in_len, float *out, spx_uint32_t * out_len)
 #endif
@@ -1166,7 +1166,7 @@ speex_resampler_process_interleaved_float (SpeexResamplerState * st,
   return RESAMPLER_ERR_SUCCESS;
 }
 
-EXPORT int
+int
 speex_resampler_process_interleaved_int (SpeexResamplerState * st,
     const spx_int16_t * in, spx_uint32_t * in_len, spx_int16_t * out,
     spx_uint32_t * out_len)
@@ -1189,7 +1189,7 @@ speex_resampler_process_interleaved_int (SpeexResamplerState * st,
   return RESAMPLER_ERR_SUCCESS;
 }
 
-EXPORT int
+int
 speex_resampler_set_rate (SpeexResamplerState * st, spx_uint32_t in_rate,
     spx_uint32_t out_rate)
 {
@@ -1197,7 +1197,7 @@ speex_resampler_set_rate (SpeexResamplerState * st, spx_uint32_t in_rate,
       out_rate);
 }
 
-EXPORT void
+void
 speex_resampler_get_rate (SpeexResamplerState * st, spx_uint32_t * in_rate,
     spx_uint32_t * out_rate)
 {
@@ -1205,7 +1205,7 @@ speex_resampler_get_rate (SpeexResamplerState * st, spx_uint32_t * in_rate,
   *out_rate = st->out_rate;
 }
 
-EXPORT int
+int
 speex_resampler_set_rate_frac (SpeexResamplerState * st, spx_uint32_t ratio_num,
     spx_uint32_t ratio_den, spx_uint32_t in_rate, spx_uint32_t out_rate)
 {
@@ -1243,7 +1243,7 @@ speex_resampler_set_rate_frac (SpeexResamplerState * st, spx_uint32_t ratio_num,
   return RESAMPLER_ERR_SUCCESS;
 }
 
-EXPORT void
+void
 speex_resampler_get_ratio (SpeexResamplerState * st, spx_uint32_t * ratio_num,
     spx_uint32_t * ratio_den)
 {
@@ -1251,7 +1251,7 @@ speex_resampler_get_ratio (SpeexResamplerState * st, spx_uint32_t * ratio_num,
   *ratio_den = st->den_rate;
 }
 
-EXPORT int
+int
 speex_resampler_set_quality (SpeexResamplerState * st, int quality)
 {
   if (quality > 10 || quality < 0)
@@ -1264,53 +1264,53 @@ speex_resampler_set_quality (SpeexResamplerState * st, int quality)
   return RESAMPLER_ERR_SUCCESS;
 }
 
-EXPORT void
+void
 speex_resampler_get_quality (SpeexResamplerState * st, int *quality)
 {
   *quality = st->quality;
 }
 
-EXPORT void
+void
 speex_resampler_set_input_stride (SpeexResamplerState * st, spx_uint32_t stride)
 {
   st->in_stride = stride;
 }
 
-EXPORT void
+void
 speex_resampler_get_input_stride (SpeexResamplerState * st,
     spx_uint32_t * stride)
 {
   *stride = st->in_stride;
 }
 
-EXPORT void
+void
 speex_resampler_set_output_stride (SpeexResamplerState * st,
     spx_uint32_t stride)
 {
   st->out_stride = stride;
 }
 
-EXPORT void
+void
 speex_resampler_get_output_stride (SpeexResamplerState * st,
     spx_uint32_t * stride)
 {
   *stride = st->out_stride;
 }
 
-EXPORT int
+int
 speex_resampler_get_input_latency (SpeexResamplerState * st)
 {
   return st->filt_len / 2;
 }
 
-EXPORT int
+int
 speex_resampler_get_output_latency (SpeexResamplerState * st)
 {
   return ((st->filt_len / 2) * st->den_rate +
       (st->num_rate >> 1)) / st->num_rate;
 }
 
-EXPORT int
+int
 speex_resampler_skip_zeros (SpeexResamplerState * st)
 {
   spx_uint32_t i;
@@ -1319,7 +1319,7 @@ speex_resampler_skip_zeros (SpeexResamplerState * st)
   return RESAMPLER_ERR_SUCCESS;
 }
 
-EXPORT int
+int
 speex_resampler_reset_mem (SpeexResamplerState * st)
 {
   spx_uint32_t i;
@@ -1328,7 +1328,7 @@ speex_resampler_reset_mem (SpeexResamplerState * st)
   return RESAMPLER_ERR_SUCCESS;
 }
 
-EXPORT const char *
+const char *
 speex_resampler_strerror (int err)
 {
   switch (err) {

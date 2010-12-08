@@ -27,7 +27,7 @@
 
 #include "vs_scanline.h"
 
-#include "gstvideoscaleorc.h"
+//#include "gstvideoscaleorc.h"
 
 #include <string.h>
 

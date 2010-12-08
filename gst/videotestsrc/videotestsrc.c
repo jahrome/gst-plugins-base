@@ -25,7 +25,7 @@
 
 #include "gstvideotestsrc.h"
 #include "videotestsrc.h"
-#include "gstvideotestsrcorc.h"
+//#include "gstvideotestsrcorc.h"
 
 
 #include <string.h>

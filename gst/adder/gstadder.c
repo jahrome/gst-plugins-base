@@ -46,7 +46,7 @@
 #include "gstadder.h"
 #include <gst/audio/audio.h>
 #include <string.h>             /* strcmp */
-#include "gstadderorc.h"
+//#include "gstadderorc.h"
 
 /* highest positive/lowest negative x-bit value we can use for clamping */
 #define MAX_INT_32  ((gint32) (0x7fffffff))

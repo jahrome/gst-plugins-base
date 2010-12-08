@@ -30,7 +30,7 @@
 #include "gstaudioquantize.h"
 #include "audioconvert.h"
 #include "gst/floatcast/floatcast.h"
-#include "gstaudioconvertorc.h"
+//#include "gstaudioconvertorc.h"
 
 #if G_BYTE_ORDER == G_LITTLE_ENDIAN
 #define orc_audio_convert_unpack_u16_le orc_audio_convert_unpack_u16
