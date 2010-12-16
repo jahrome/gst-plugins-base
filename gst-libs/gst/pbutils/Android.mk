@@ -7,7 +7,7 @@ LOCAL_SRC_FILES:= 		\
 	descriptions.c    	\
 	install-plugins.c 	\
 	missing-plugins.c	\
-	android/gst/pbutils/pbutils-enumtypes.c
+	pbutils-enumtypes.c
 
 LOCAL_SHARED_LIBRARIES := 	\
 	libgstreamer-0.10	\
@@ -21,10 +21,10 @@ LOCAL_MODULE:= libgstpbutils-0.10
 
 LOCAL_C_INCLUDES := 			\
 	$(LOCAL_PATH)			\
-	$(LOCAL_PATH)/android		\
 	$(GST_PLUGINS_BASE_TOP)		\
 	$(GST_PLUGINS_BASE_TOP)/android	\
 	$(GST_PLUGINS_BASE_TOP)/gst-libs\
+	external/gst-plugins-base/gst-libs\
 	external/gstreamer		\
 	external/gstreamer/android 	\
 	external/gstreamer/libs		\

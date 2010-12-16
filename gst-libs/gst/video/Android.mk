@@ -6,7 +6,7 @@ LOCAL_SRC_FILES:= 		\
 	video.c 		\
 	gstvideosink.c 		\
 	gstvideofilter.c 	\
-	./android/gst/video/video-enumtypes.c
+	video-enumtypes.c
 
 LOCAL_SHARED_LIBRARIES :=	\
 	libgstreamer-0.10	\

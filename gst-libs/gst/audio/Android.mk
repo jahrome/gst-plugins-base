@@ -15,7 +15,7 @@ LOCAL_SRC_FILES:= 			\
 	gstbaseaudiosink.c 		\
 	gstbaseaudiosrc.c 		\
 	gstringbuffer.c   		\
-	./android/gst/audio/audio-enumtypes.c
+	audio-enumtypes.c
 
 LOCAL_SHARED_LIBRARIES :=	\
 	libgstreamer-0.10	\
@@ -32,8 +32,6 @@ LOCAL_C_INCLUDES := 			\
 	$(GST_PLUGINS_BASE_TOP)		\
 	$(GST_PLUGINS_BASE_TOP)/gst-libs\
 	$(GST_PLUGINS_BASE_TOP)/android	\
-	$(LOCAL_PATH)/android		\
-	$(LOCAL_PATH)/android/gst/audio	\
 	external/gstreamer		\
 	external/gstreamer/android 	\
 	external/gstreamer/gst/android 	\
