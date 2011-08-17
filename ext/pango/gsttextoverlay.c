@@ -65,6 +65,15 @@
  * Uh? What are you talking about?
  * I don&apos;t understand  (18-62s)
  * ]|
+ * One can also feed arbitrary live text into the element:
+ * |[
+ * gst-launch fdsrc fd=0 ! text/plain ! txt. videotestsrc ! \
+ * textoverlay  name=txt shaded-background=yes font-desc="Serif 40" wait-text=false ! \
+ * xvimagesink
+ * ]| This shows new text as entered on the terminal (stdin). This is not suited
+ * for subtitles as the test overlay is not timed. Subtitles should use
+ * timestamped formats. For the above use case one can also read the text from
+ * the application as set the #GstTextOverlay:text property.
  * </para>
  * </refsect2>
  */
@@ -95,6 +104,7 @@ GST_DEBUG_CATEGORY (pango_debug);
 
 #define DEFAULT_PROP_TEXT 	""
 #define DEFAULT_PROP_SHADING	FALSE
+#define DEFAULT_PROP_SHADOW	TRUE
 #define DEFAULT_PROP_VALIGNMENT	GST_TEXT_OVERLAY_VALIGN_BASELINE
 #define DEFAULT_PROP_HALIGNMENT	GST_TEXT_OVERLAY_HALIGN_CENTER
 #define DEFAULT_PROP_VALIGN	"baseline"
@@ -113,6 +123,7 @@ GST_DEBUG_CATEGORY (pango_debug);
 #define DEFAULT_PROP_AUTO_ADJUST_SIZE TRUE
 #define DEFAULT_PROP_VERTICAL_RENDER  FALSE
 #define DEFAULT_PROP_COLOR      0xffffffff
+#define DEFAULT_PROP_OUTLINE_COLOR 0xff000000
 
 /* make a property of me */
 #define DEFAULT_SHADING_VALUE    -80
@@ -185,6 +196,8 @@ enum
   PROP_AUTO_ADJUST_SIZE,
   PROP_VERTICAL_RENDER,
   PROP_COLOR,
+  PROP_SHADOW,
+  PROP_OUTLINE_COLOR,
   PROP_LAST
 };
 
@@ -418,6 +431,17 @@ gst_text_overlay_class_init (GstTextOverlayClass * klass)
       g_param_spec_boolean ("shaded-background", "shaded background",
           "Whether to shade the background under the text area",
           DEFAULT_PROP_SHADING, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+  /**
+   * GstTextOverlay:shadow
+   *
+   * Whether to display a shadow of each letter under the text.
+   *
+   * Since: 0.10.35
+   **/
+  g_object_class_install_property (G_OBJECT_CLASS (klass), PROP_SHADOW,
+      g_param_spec_boolean ("shadow", "create shadow of text",
+          "Whether to create a shadow of the letters under the text",
+          DEFAULT_PROP_SHADOW, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
   g_object_class_install_property (G_OBJECT_CLASS (klass), PROP_VALIGNMENT,
       g_param_spec_enum ("valignment", "vertical alignment",
           "Vertical alignment of the text", GST_TYPE_TEXT_OVERLAY_VALIGN,
@@ -497,6 +521,18 @@ gst_text_overlay_class_init (GstTextOverlayClass * klass)
       g_param_spec_uint ("color", "Color",
           "Color to use for text (big-endian ARGB).", 0, G_MAXUINT32,
           DEFAULT_PROP_COLOR,
+          G_PARAM_READWRITE | GST_PARAM_CONTROLLABLE | G_PARAM_STATIC_STRINGS));
+  /**
+   * GstTextOverlay:outline-color
+   *
+   * Color of the outline of the rendered text.
+   *
+   * Since: 0.10.35
+   **/
+  g_object_class_install_property (G_OBJECT_CLASS (klass), PROP_OUTLINE_COLOR,
+      g_param_spec_uint ("outline-color", "Text Outline Color",
+          "Color to use for outline the text (big-endian ARGB).", 0,
+          G_MAXUINT32, DEFAULT_PROP_OUTLINE_COLOR,
           G_PARAM_READWRITE | GST_PARAM_CONTROLLABLE | G_PARAM_STATIC_STRINGS));
 
   /**
@@ -643,6 +679,7 @@ gst_text_overlay_init (GstTextOverlay * overlay, GstTextOverlayClass * klass)
   gst_text_overlay_adjust_values_with_fontdesc (overlay, desc);
 
   overlay->color = DEFAULT_PROP_COLOR;
+  overlay->outline_color = DEFAULT_PROP_OUTLINE_COLOR;
   overlay->halign = DEFAULT_PROP_HALIGNMENT;
   overlay->valign = DEFAULT_PROP_VALIGNMENT;
   overlay->xpad = DEFAULT_PROP_XPAD;
@@ -655,6 +692,7 @@ gst_text_overlay_init (GstTextOverlay * overlay, GstTextOverlayClass * klass)
   overlay->wrap_mode = DEFAULT_PROP_WRAP_MODE;
 
   overlay->want_shading = DEFAULT_PROP_SHADING;
+  overlay->want_shadow = DEFAULT_PROP_SHADOW;
   overlay->shading_value = DEFAULT_SHADING_VALUE;
   overlay->silent = DEFAULT_PROP_SILENT;
   overlay->wait_text = DEFAULT_PROP_WAIT_TEXT;
@@ -798,6 +836,9 @@ gst_text_overlay_set_property (GObject * object, guint prop_id,
     case PROP_SHADING:
       overlay->want_shading = g_value_get_boolean (value);
       break;
+    case PROP_SHADOW:
+      overlay->want_shadow = g_value_get_boolean (value);
+      break;
     case PROP_XPAD:
       overlay->xpad = g_value_get_int (value);
       break;
@@ -879,6 +920,9 @@ gst_text_overlay_set_property (GObject * object, guint prop_id,
     case PROP_COLOR:
       overlay->color = g_value_get_uint (value);
       break;
+    case PROP_OUTLINE_COLOR:
+      overlay->outline_color = g_value_get_uint (value);
+      break;
     case PROP_SILENT:
       overlay->silent = g_value_get_boolean (value);
       break;
@@ -926,6 +970,9 @@ gst_text_overlay_get_property (GObject * object, guint prop_id,
     case PROP_SHADING:
       g_value_set_boolean (value, overlay->want_shading);
       break;
+    case PROP_SHADOW:
+      g_value_set_boolean (value, overlay->want_shadow);
+      break;
     case PROP_XPAD:
       g_value_set_int (value, overlay->xpad);
       break;
@@ -970,6 +1017,9 @@ gst_text_overlay_get_property (GObject * object, guint prop_id,
       break;
     case PROP_COLOR:
       g_value_set_uint (value, overlay->color);
+      break;
+    case PROP_OUTLINE_COLOR:
+      g_value_set_uint (value, overlay->outline_color);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -1374,15 +1424,22 @@ gst_text_overlay_render_pangocairo (GstTextOverlay * overlay,
    */
 
   /* draw shadow text */
-  cairo_save (cr);
-  cairo_translate (cr, overlay->shadow_offset, overlay->shadow_offset);
-  cairo_set_source_rgba (cr, 0.0, 0.0, 0.0, 0.5);
-  pango_cairo_show_layout (cr, overlay->layout);
-  cairo_restore (cr);
+  if (overlay->want_shadow) {
+    cairo_save (cr);
+    cairo_translate (cr, overlay->shadow_offset, overlay->shadow_offset);
+    cairo_set_source_rgba (cr, 0.0, 0.0, 0.0, 0.5);
+    pango_cairo_show_layout (cr, overlay->layout);
+    cairo_restore (cr);
+  }
+
+  a = (overlay->outline_color >> 24) & 0xff;
+  r = (overlay->outline_color >> 16) & 0xff;
+  g = (overlay->outline_color >> 8) & 0xff;
+  b = (overlay->outline_color >> 0) & 0xff;
 
   /* draw outline text */
   cairo_save (cr);
-  cairo_set_source_rgb (cr, 0.0, 0.0, 0.0);
+  cairo_set_source_rgba (cr, r / 255.0, g / 255.0, b / 255.0, a / 255.0);
   cairo_set_line_width (cr, overlay->outline_offset);
   pango_cairo_layout_path (cr, overlay->layout);
   cairo_stroke (cr);
@@ -2342,16 +2399,22 @@ gst_text_overlay_text_chain (GstPad * pad, GstBuffer * buffer)
     else if (GST_BUFFER_DURATION_IS_VALID (buffer))
       GST_BUFFER_DURATION (buffer) = clip_stop - clip_start;
 
-    /* Wait for the previous buffer to go away */
-    while (overlay->text_buffer != NULL) {
-      GST_DEBUG ("Pad %s:%s has a buffer queued, waiting",
-          GST_DEBUG_PAD_NAME (pad));
-      GST_TEXT_OVERLAY_WAIT (overlay);
-      GST_DEBUG ("Pad %s:%s resuming", GST_DEBUG_PAD_NAME (pad));
-      if (overlay->text_flushing) {
-        GST_OBJECT_UNLOCK (overlay);
-        ret = GST_FLOW_WRONG_STATE;
-        goto beach;
+    if (overlay->text_buffer
+        && (!GST_BUFFER_TIMESTAMP_IS_VALID (overlay->text_buffer)
+            || !GST_BUFFER_DURATION_IS_VALID (overlay->text_buffer))) {
+      gst_text_overlay_pop_text (overlay);
+    } else {
+      /* Wait for the previous buffer to go away */
+      while (overlay->text_buffer != NULL) {
+        GST_DEBUG ("Pad %s:%s has a buffer queued, waiting",
+            GST_DEBUG_PAD_NAME (pad));
+        GST_TEXT_OVERLAY_WAIT (overlay);
+        GST_DEBUG ("Pad %s:%s resuming", GST_DEBUG_PAD_NAME (pad));
+        if (overlay->text_flushing) {
+          GST_OBJECT_UNLOCK (overlay);
+          ret = GST_FLOW_WRONG_STATE;
+          goto beach;
+        }
       }
     }
 
@@ -2500,7 +2563,6 @@ wait_for_text_buf:
           !GST_BUFFER_DURATION_IS_VALID (overlay->text_buffer)) {
         GST_WARNING_OBJECT (overlay,
             "Got text buffer with invalid timestamp or duration");
-        pop_text = TRUE;
         valid_text_time = FALSE;
       } else {
         text_start = GST_BUFFER_TIMESTAMP (overlay->text_buffer);

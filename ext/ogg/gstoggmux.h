@@ -55,10 +55,7 @@ typedef struct
 
   GstSegment segment;
 
-  /* These two buffers make a very simple queue - they enter as 'next_buffer'
-   * and (usually) leave as 'buffer', except at EOS, when buffer will be NULL */
   GstBuffer *buffer;            /* the first waiting buffer for the pad */
-  GstBuffer *next_buffer;       /* the second waiting buffer for the pad */
 
   gint64 packetno;              /* number of next packet */
   gint64 pageno;                /* number of next page */
@@ -81,6 +78,9 @@ typedef struct
   gboolean first_delta;         /* was the first packet in the page a delta */
   gboolean prev_delta;          /* was the previous buffer a delta frame */
   gboolean data_pushed;         /* whether we pushed data already */
+
+  gint64  next_granule;         /* expected granule of next buffer ts */
+  gint64  keyframe_granule;     /* granule of last preceding keyframe */
 
   GstPadEventFunction collect_event;
 
@@ -123,6 +123,7 @@ struct _GstOggMux
 
   guint64 max_delay;
   guint64 max_page_delay;
+  guint64 max_tolerance;
 
   GstOggPadData *delta_pad;     /* when a delta frame is detected on a stream, we mark
                                    pages as delta frames up to the page that has the

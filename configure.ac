@@ -5,7 +5,7 @@ dnl please read gstreamer/docs/random/autotools before changing this file
 dnl initialize autoconf
 dnl releases only do -Wall, git and prerelease does -Werror too
 dnl use a three digit version number for releases, and four for git/prerelease
-AC_INIT(GStreamer Base Plug-ins, 0.10.35,
+AC_INIT(GStreamer Base Plug-ins, 0.10.35.1,
     http://bugzilla.gnome.org/enter_bug.cgi?product=GStreamer,
     gst-plugins-base)
 
@@ -60,7 +60,7 @@ AC_LIBTOOL_WIN32_DLL
 AM_PROG_LIBTOOL
 
 dnl *** required versions of GStreamer stuff ***
-GST_REQ=0.10.34
+GST_REQ=0.10.35.1
 
 dnl *** autotools stuff ****
 
@@ -213,6 +213,8 @@ LIBS="$save_libs"
 dnl used in gst-libs/gst/pbutils and associated unit test
 AC_CHECK_HEADERS([process.h sys/types.h sys/wait.h sys/stat.h])
 
+AC_CHECK_HEADERS([xmmintrin.h emmintrin.h])
+
 dnl ffmpegcolorspace includes _stdint.h
 dnl also, Windows does not have long long
 AX_CREATE_STDINT_H
@@ -259,7 +261,7 @@ AC_CHECK_FUNC(gethostbyname,,[AC_CHECK_LIB(nsl,gethostbyname)])
 dnl *** checks for dependency libraries ***
 
 dnl GLib is required
-AG_GST_GLIB_CHECK([2.22])
+AG_GST_GLIB_CHECK([2.24])
 
 ORC_CHECK([0.4.11])
 
@@ -502,6 +504,20 @@ else
   AC_MSG_RESULT([no (disabled via --disable-iso-codes)])
   AM_CONDITIONAL(USE_ISO_CODES, false)
 fi
+
+dnl *** zlib is optionally used by id3 tag parsing in libgsttag ***
+translit(dnm, m, l) AM_CONDITIONAL(USE_ZLIB, true)
+AG_GST_CHECK_FEATURE(ZLIB, [zlib support for ID3 parsing in libgsttag],, [
+  PKG_CHECK_MODULES(ZLIB, [ zlib ], [
+      HAVE_ZLIB="yes"
+    ], [
+      AG_GST_CHECK_LIBHEADER(ZLIB, z, uncompress,, zlib.h, [
+        HAVE_ZLIB="yes"
+        ZLIB_LIBS="-lz"
+        AC_SUBST(ZLIB_LIBS)
+      ])
+    ])
+])
 
 dnl *** sys plug-ins ***
 
@@ -1004,6 +1020,7 @@ tests/Makefile
 tests/check/Makefile
 tests/examples/Makefile
 tests/examples/app/Makefile
+tests/examples/audio/Makefile
 tests/examples/dynamic/Makefile
 tests/examples/encoding/Makefile
 tests/examples/gio/Makefile

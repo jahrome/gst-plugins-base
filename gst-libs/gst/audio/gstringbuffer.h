@@ -88,12 +88,14 @@ typedef enum {
  * @GST_BUFTYPE_MU_LAW: samples in mulaw
  * @GST_BUFTYPE_A_LAW: samples in alaw
  * @GST_BUFTYPE_IMA_ADPCM: samples in ima adpcm
- * @GST_BUFTYPE_MPEG: samples in mpeg audio format
+ * @GST_BUFTYPE_MPEG: samples in mpeg audio (but not AAC) format
  * @GST_BUFTYPE_GSM: samples in gsm format
  * @GST_BUFTYPE_IEC958: samples in IEC958 frames (e.g. AC3)
  * @GST_BUFTYPE_AC3: samples in AC3 format
  * @GST_BUFTYPE_EAC3: samples in EAC3 format
  * @GST_BUFTYPE_DTS: samples in DTS format
+ * @GST_BUFTYPE_MPEG2_AAC: samples in MPEG-2 AAC format
+ * @GST_BUFTYPE_MPEG4_AAC: samples in MPEG-4 AAC format
  *
  * The format of the samples in the ringbuffer.
  */
@@ -109,9 +111,58 @@ typedef enum
   GST_BUFTYPE_IEC958,
   GST_BUFTYPE_AC3,
   GST_BUFTYPE_EAC3,
-  GST_BUFTYPE_DTS
+  GST_BUFTYPE_DTS,
+  GST_BUFTYPE_MPEG2_AAC,
+  GST_BUFTYPE_MPEG4_AAC,
 } GstBufferFormatType;
 
+/**
+ * GstBufferFormat:
+ * @GST_UNKNOWN: unspecified
+ * @GST_S8: integer signed 8 bit
+ * @GST_U8: integer unsigned 8 bit
+ * @GST_S16_LE: integer signed 16 bit little endian
+ * @GST_S16_BE: integer signed 16 bit big endian
+ * @GST_U16_LE: integer unsigned 16 bit little endian
+ * @GST_U16_BE: integer unsigned 16 bit big endian
+ * @GST_S24_LE: integer signed 24 bit little endian
+ * @GST_S24_BE: integer signed 24 bit big endian
+ * @GST_U24_LE: integer unsigned 24 bit little endian
+ * @GST_U24_BE: integer unsigned 24 bit big endian
+ * @GST_S32_LE: integer signed 32 bit little endian
+ * @GST_S32_BE: integer signed 32 bit big endian
+ * @GST_U32_LE: integer unsigned 32 bit little endian
+ * @GST_U32_BE: integer unsigned 32 bit big endian
+ * @GST_S24_3LE: integer signed 24 bit little endian packed in 3 bytes
+ * @GST_S24_3BE: integer signed 24 bit big endian packed in 3 bytes
+ * @GST_U24_3LE: integer unsigned 24 bit little endian packed in 3 bytes
+ * @GST_U24_3BE: integer unsigned 24 bit big endian packed in 3 bytes
+ * @GST_S20_3LE: integer signed 20 bit little endian packed in 3 bytes
+ * @GST_S20_3BE: integer signed 20 bit big endian packed in 3 bytes
+ * @GST_U20_3LE: integer unsigned 20 bit little endian packed in 3 bytes
+ * @GST_U20_3BE: integer unsigned 20 bit big endian packed in 3 bytes
+ * @GST_S18_3LE: integer signed 18 bit little endian packed in 3 bytes
+ * @GST_S18_3BE: integer signed 18 bit big endian packed in 3 bytes
+ * @GST_U18_3LE: integer unsigned 18 bit little endian packed in 3 bytes
+ * @GST_U18_3BE: integer unsigned 18 bit big endian packed in 3 bytes
+ * @GST_FLOAT32_LE: floating 32 bit little endian
+ * @GST_FLOAT32_BE: floating 32 bit big endian
+ * @GST_FLOAT64_LE: floating 64 bit little endian
+ * @GST_FLOAT64_BE: floating 64 bit big endian
+ * @GST_MU_LAW: mu-law
+ * @GST_A_LAW: a-law
+ * @GST_IMA_ADPCM: ima adpcm
+ * @GST_MPEG: mpeg audio (but not aac)
+ * @GST_GSM: gsm
+ * @GST_IEC958: IEC958 frames
+ * @GST_AC3: ac3
+ * @GST_EAC3: eac3
+ * @GST_DTS: dts
+ * @GST_MPEG2_AAC: mpeg-2 aac
+ * @GST_MPEG4_AAC: mpeg-4 aac
+ *
+ * The detailed format of the samples in the ringbuffer.
+ */
 typedef enum
 {
   GST_UNKNOWN,
@@ -161,7 +212,9 @@ typedef enum
   GST_IEC958,
   GST_AC3,
   GST_EAC3,
-  GST_DTS
+  GST_DTS,
+  GST_MPEG2_AAC,
+  GST_MPEG4_AAC,
 } GstBufferFormat;
 
 /**

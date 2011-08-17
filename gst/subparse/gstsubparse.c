@@ -263,6 +263,7 @@ gst_sub_parse_src_query (GstPad * pad, GstQuery * query)
         gst_query_set_position (query, GST_FORMAT_TIME,
             self->segment.last_stop);
       }
+      break;
     }
     case GST_QUERY_SEEKING:
     {
@@ -282,7 +283,6 @@ gst_sub_parse_src_query (GstPad * pad, GstQuery * query)
       }
 
       gst_query_set_seeking (query, fmt, seekable, seekable ? 0 : -1, -1);
-
       break;
     }
     default:
@@ -1238,8 +1238,8 @@ gst_sub_parse_data_format_autodetect_regex_once (GstSubParseRegex regtype)
   switch (regtype) {
     case GST_SUB_PARSE_REGEX_MDVDSUB:
       result =
-          (gpointer) g_regex_new ("^\\{[0-9]+\\}\\{[0-9]+\\}", G_REGEX_RAW, 0,
-          &gerr);
+          (gpointer) g_regex_new ("^\\{[0-9]+\\}\\{[0-9]+\\}",
+          G_REGEX_RAW | G_REGEX_OPTIMIZE, 0, &gerr);
       if (result == NULL) {
         g_warning ("Compilation of mdvd regex failed: %s", gerr->message);
         g_error_free (gerr);
@@ -1249,7 +1249,7 @@ gst_sub_parse_data_format_autodetect_regex_once (GstSubParseRegex regtype)
       result = (gpointer) g_regex_new ("^([ 0-9]){0,3}[0-9]\\s*(\x0d)?\x0a"
           "[ 0-9][0-9]:[ 0-9][0-9]:[ 0-9][0-9][,.][ 0-9]{0,2}[0-9]"
           " +--> +([ 0-9])?[0-9]:[ 0-9][0-9]:[ 0-9][0-9][,.][ 0-9]{0,2}[0-9]",
-          G_REGEX_RAW, 0, &gerr);
+          G_REGEX_RAW | G_REGEX_OPTIMIZE, 0, &gerr);
       if (result == NULL) {
         g_warning ("Compilation of subrip regex failed: %s", gerr->message);
         g_error_free (gerr);
@@ -1257,7 +1257,7 @@ gst_sub_parse_data_format_autodetect_regex_once (GstSubParseRegex regtype)
       break;
     case GST_SUB_PARSE_REGEX_DKS:
       result = (gpointer) g_regex_new ("^\\[[0-9]+:[0-9]+:[0-9]+\\].*",
-          G_REGEX_RAW, 0, &gerr);
+          G_REGEX_RAW | G_REGEX_OPTIMIZE, 0, &gerr);
       if (result == NULL) {
         g_warning ("Compilation of dks regex failed: %s", gerr->message);
         g_error_free (gerr);

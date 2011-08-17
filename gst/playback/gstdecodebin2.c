@@ -170,6 +170,8 @@ struct _GstDecodeBin
   GList *blocked_pads;          /* pads that have set to block */
 
   gboolean expose_allstreams;   /* Whether to expose unknow type streams or not */
+
+  gboolean upstream_seekable;   /* if upstream is seekable */
 };
 
 struct _GstDecodeBinClass
@@ -216,9 +218,10 @@ enum
 
 /* automatic sizes, while prerolling we buffer up to 2MB, we ignore time
  * and buffers in this case. */
-#define AUTO_PREROLL_SIZE_BYTES     2 * 1024 * 1024
-#define AUTO_PREROLL_SIZE_BUFFERS   0
-#define AUTO_PREROLL_SIZE_TIME      0
+#define AUTO_PREROLL_SIZE_BYTES                  2 * 1024 * 1024
+#define AUTO_PREROLL_SIZE_BUFFERS                0
+#define AUTO_PREROLL_NOT_SEEKABLE_SIZE_TIME      0
+#define AUTO_PREROLL_SEEKABLE_SIZE_TIME          10 * GST_SECOND
 
 /* whan playing, keep a max of 2MB of data but try to keep the number of buffers
  * as low as possible (try to aim for 5 buffers) */
@@ -421,7 +424,7 @@ static void gst_decode_group_free (GstDecodeGroup * group);
 static GstDecodeGroup *gst_decode_group_new (GstDecodeBin * dbin,
     GstDecodeChain * chain);
 static gboolean gst_decode_chain_is_complete (GstDecodeChain * chain);
-static void gst_decode_chain_handle_eos (GstDecodeChain * chain);
+static gboolean gst_decode_chain_handle_eos (GstDecodeChain * chain);
 static gboolean gst_decode_chain_expose (GstDecodeChain * chain,
     GList ** endpads, gboolean * missing_plugin);
 static gboolean gst_decode_chain_is_drained (GstDecodeChain * chain);
@@ -2045,6 +2048,48 @@ beach:
   return;
 }
 
+/* check_upstream_seekable:
+ *
+ * Check if upstream is seekable.
+ */
+static void
+check_upstream_seekable (GstDecodeBin * dbin, GstPad * pad)
+{
+  GstQuery *query;
+  gint64 start = -1, stop = -1;
+
+  dbin->upstream_seekable = FALSE;
+
+  query = gst_query_new_seeking (GST_FORMAT_BYTES);
+  if (!gst_pad_peer_query (pad, query)) {
+    GST_DEBUG_OBJECT (dbin, "seeking query failed");
+    gst_query_unref (query);
+    return;
+  }
+
+  gst_query_parse_seeking (query, NULL, &dbin->upstream_seekable,
+      &start, &stop);
+
+  gst_query_unref (query);
+
+  /* try harder to query upstream size if we didn't get it the first time */
+  if (dbin->upstream_seekable && stop == -1) {
+    GstFormat fmt = GST_FORMAT_BYTES;
+
+    GST_DEBUG_OBJECT (dbin, "doing duration query to fix up unset stop");
+    gst_pad_query_peer_duration (pad, &fmt, &stop);
+  }
+
+  /* if upstream doesn't know the size, it's likely that it's not seekable in
+   * practice even if it technically may be seekable */
+  if (dbin->upstream_seekable && (start != 0 || stop <= start)) {
+    GST_DEBUG_OBJECT (dbin, "seekable but unknown start/stop -> disable");
+    dbin->upstream_seekable = FALSE;
+  }
+
+  GST_DEBUG_OBJECT (dbin, "upstream seekable: %d", dbin->upstream_seekable);
+}
+
 static void
 type_found (GstElement * typefind, guint probability,
     GstCaps * caps, GstDecodeBin * decode_bin)
@@ -2072,6 +2117,10 @@ type_found (GstElement * typefind, guint probability,
 
   pad = gst_element_get_static_pad (typefind, "src");
   sink_pad = gst_element_get_static_pad (typefind, "sink");
+
+  /* if upstream is seekable we can safely set a limit in time to the queues so
+   * that streams at low bitrates can preroll */
+  check_upstream_seekable (decode_bin, sink_pad);
 
   /* need some lock here to prevent race with shutdown state change
    * which might yank away e.g. decode_chain while building stuff here.
@@ -2656,7 +2705,8 @@ decodebin_set_queue_size (GstDecodeBin * dbin, GstElement * multiqueue,
     if ((max_buffers = dbin->max_size_buffers) == 0)
       max_buffers = AUTO_PREROLL_SIZE_BUFFERS;
     if ((max_time = dbin->max_size_time) == 0)
-      max_time = AUTO_PREROLL_SIZE_TIME;
+      max_time = dbin->upstream_seekable ? AUTO_PREROLL_SEEKABLE_SIZE_TIME :
+          AUTO_PREROLL_NOT_SEEKABLE_SIZE_TIME;
   } else {
     /* update runtime limits. At runtime, we try to keep the amount of buffers
      * in the queues as low as possible (but at least 5 buffers). */
@@ -2858,14 +2908,14 @@ out:
 
 /* check if the group is drained, meaning all pads have seen an EOS
  * event.  */
-static void
+static gboolean
 gst_decode_pad_handle_eos (GstDecodePad * pad)
 {
   GstDecodeChain *chain = pad->chain;
 
   GST_LOG_OBJECT (pad->dbin, "chain : %p, pad %p", chain, pad);
   pad->drained = TRUE;
-  gst_decode_chain_handle_eos (chain);
+  return gst_decode_chain_handle_eos (chain);
 }
 
 /* gst_decode_chain_handle_eos:
@@ -2876,17 +2926,23 @@ gst_decode_pad_handle_eos (GstDecodePad * pad)
  * If there are groups to switch to, hide the current active
  * one and expose the new one.
  *
+ * If a group isn't completely drained (i.e. we received EOS
+ * only on one of the streams) this function will return FALSE
+ * to indicate the EOS on the given chain should be dropped
+ * to avoid it from going downstream.
+ *
  * MT-safe, don't call with chain lock!
  */
-static void
+static gboolean
 gst_decode_chain_handle_eos (GstDecodeChain * eos_chain)
 {
   GstDecodeBin *dbin = eos_chain->dbin;
   GstDecodeGroup *group;
   GstDecodeChain *chain = eos_chain;
   gboolean drained;
+  gboolean forward_eos = TRUE;
 
-  g_return_if_fail (eos_chain->endpad);
+  g_return_val_if_fail (eos_chain->endpad, TRUE);
 
   CHAIN_MUTEX_LOCK (chain);
   while ((group = chain->parent)) {
@@ -2906,6 +2962,8 @@ gst_decode_chain_handle_eos (GstDecodeChain * eos_chain)
   /* Now either group == NULL and chain == dbin->decode_chain
    * or chain is the lowest chain that has a non-drained group */
   if (chain->active_group && drained && chain->next_groups) {
+    /* There's an active group which is drained and we have another
+     * one to switch to. */
     GST_DEBUG_OBJECT (dbin, "Hiding current group %p", chain->active_group);
     gst_decode_group_hide (chain->active_group);
     chain->old_groups = g_list_prepend (chain->old_groups, chain->active_group);
@@ -2920,6 +2978,7 @@ gst_decode_chain_handle_eos (GstDecodeChain * eos_chain)
       gst_decode_bin_expose (dbin);
     EXPOSE_UNLOCK (dbin);
   } else if (!chain->active_group || drained) {
+    /* The group is drained and there isn't a future one */
     g_assert (chain == dbin->decode_chain);
     CHAIN_MUTEX_UNLOCK (chain);
 
@@ -2930,7 +2989,12 @@ gst_decode_chain_handle_eos (GstDecodeChain * eos_chain)
     CHAIN_MUTEX_UNLOCK (chain);
     GST_DEBUG_OBJECT (dbin,
         "Current active group in chain %p is not drained yet", chain);
+    /* Instruct caller to drop EOS event if we have future groups */
+    if (chain->next_groups)
+      forward_eos = FALSE;
   }
+
+  return forward_eos;
 }
 
 /* gst_decode_group_is_drained:
@@ -3431,18 +3495,24 @@ source_pad_blocked_cb (GstPad * pad, gboolean blocked, GstDecodePad * dpad)
 static gboolean
 source_pad_event_probe (GstPad * pad, GstEvent * event, GstDecodePad * dpad)
 {
+  gboolean res = TRUE;
+
   GST_LOG_OBJECT (pad, "%s dpad:%p", GST_EVENT_TYPE_NAME (event), dpad);
 
   if (GST_EVENT_TYPE (event) == GST_EVENT_EOS) {
     GST_DEBUG_OBJECT (pad, "we received EOS");
 
-    /* Check if all pads are drained. If there is a next group to expose, we
-     * will remove the ghostpad of the current group first, which unlinks the
-     * peer and so drops the EOS. */
-    gst_decode_pad_handle_eos (dpad);
+    /* Check if all pads are drained.
+     * * If there is no next group, we will let the EOS go through.
+     * * If there is a next group but the current group isn't completely
+     *   drained, we will drop the EOS event.
+     * * If there is a next group to expose and this was the last non-drained
+     *   pad for that group, we will remove the ghostpad of the current group
+     *   first, which unlinks the peer and so drops the EOS. */
+    res = gst_decode_pad_handle_eos (dpad);
   }
-  /* never drop events */
-  return TRUE;
+
+  return res;
 }
 
 static void

@@ -12,7 +12,8 @@ TESTS_ENVIRONMENT = \
 	$(REGISTRY_ENVIRONMENT)					\
 	GST_PLUGIN_SYSTEM_PATH=					\
 	GST_PLUGIN_PATH=$(top_builddir)/gst:$(top_builddir)/sys:$(top_builddir)/ext:$(GST_PLUGINS_DIR) \
-	GST_PLUGIN_LOADING_WHITELIST="gstreamer:gst-plugins-base@$(top_builddir)"
+	GST_PLUGIN_LOADING_WHITELIST="gstreamer:gst-plugins-base@$(top_builddir)" \
+	GST_TAG_LICENSE_TRANSLATIONS_DICT="$(top_srcdir)/gst-libs/gst/tag/license-translations.dict"
 
 
 # ths core dumps of some machines have PIDs appended
@@ -129,6 +130,7 @@ check_PROGRAMS = \
 	elements/multifdsink \
 	elements/playbin \
 	elements/playbin2 \
+	elements/playbin2-compressed \
 	$(check_subparse) \
 	elements/videorate \
 	elements/videoscale \
@@ -171,6 +173,7 @@ VALGRIND_TO_FIX = \
 noinst_PROGRAMS = $(check_libvisual)
 
 noinst_HEADERS = \
+	libs/struct_arm.h     \
 	libs/struct_i386.h     \
 	libs/struct_i386_osx.h \
 	libs/struct_x86_64.h
@@ -376,6 +379,9 @@ elements_playbin_CFLAGS = $(GST_BASE_CFLAGS) $(AM_CFLAGS)
 elements_playbin2_LDADD = $(GST_BASE_LIBS) $(LDADD)
 elements_playbin2_CFLAGS = $(GST_BASE_CFLAGS) $(AM_CFLAGS)
 
+elements_playbin2_compressed_LDADD = $(top_builddir)/gst-libs/gst/interfaces/libgstinterfaces-@GST_MAJORMINOR@.la $(GST_BASE_LIBS) $(LDADD)
+elements_playbin2_compressed_CFLAGS = $(GST_PLUGINS_BASE_CFLAGS) $(GST_BASE_CFLAGS) $(AM_CFLAGS)
+
 elements_decodebin_LDADD = $(GST_BASE_LIBS) $(LDADD)
 elements_decodebin_CFLAGS = $(GST_BASE_CFLAGS) $(AM_CFLAGS)
 
@@ -394,6 +400,7 @@ elements_audioresample_CFLAGS = \
 	$(AM_CFLAGS)
 
 elements_audioresample_LDADD = \
+	$(top_builddir)/gst-libs/gst/fft/libgstfft-@GST_MAJORMINOR@.la \
 	$(top_builddir)/gst-libs/gst/audio/libgstaudio-@GST_MAJORMINOR@.la \
 	$(top_builddir)/gst-libs/gst/interfaces/libgstinterfaces-@GST_MAJORMINOR@.la \
 	$(GST_BASE_LIBS) \
@@ -404,7 +411,6 @@ elements_textoverlay_CFLAGS = $(GST_BASE_CFLAGS) $(AM_CFLAGS)
 
 elements_volume_LDADD = \
 	$(top_builddir)/gst-libs/gst/interfaces/libgstinterfaces-@GST_MAJORMINOR@.la \
-	$(GST_PLUGINS_BASE_LIBS) \
 	$(GST_CONTROLLER_LIBS) \
 	$(GST_BASE_LIBS) \
 	$(LDADD)

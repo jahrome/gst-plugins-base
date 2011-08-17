@@ -415,7 +415,7 @@ gst_base_audio_sink_query (GstElement * element, GstQuery * query)
       if ((res =
               gst_base_sink_query_latency (GST_BASE_SINK_CAST (basesink), &live,
                   &us_live, &min_l, &max_l))) {
-        GstClockTime min_latency, max_latency;
+        GstClockTime base_latency, min_latency, max_latency;
 
         /* we and upstream are both live, adjust the min_latency */
         if (live && us_live) {
@@ -434,21 +434,25 @@ gst_base_audio_sink_query (GstElement * element, GstQuery * query)
 
           basesink->priv->us_latency = min_l;
 
-          min_latency =
+          base_latency =
               gst_util_uint64_scale_int (spec->seglatency * spec->segsize,
               GST_SECOND, spec->rate * spec->bytes_per_sample);
           GST_OBJECT_UNLOCK (basesink);
 
           /* we cannot go lower than the buffer size and the min peer latency */
-          min_latency = min_latency + min_l;
+          min_latency = base_latency + min_l;
           /* the max latency is the max of the peer, we can delay an infinite
            * amount of time. */
-          max_latency = min_latency + (max_l == -1 ? 0 : max_l);
+          max_latency = (max_l == -1) ? -1 : (base_latency + max_l);
 
           GST_DEBUG_OBJECT (basesink,
               "peer min %" GST_TIME_FORMAT ", our min latency: %"
               GST_TIME_FORMAT, GST_TIME_ARGS (min_l),
               GST_TIME_ARGS (min_latency));
+          GST_DEBUG_OBJECT (basesink,
+              "peer max %" GST_TIME_FORMAT ", our max latency: %"
+              GST_TIME_FORMAT, GST_TIME_ARGS (max_l),
+              GST_TIME_ARGS (max_latency));
         } else {
           GST_DEBUG_OBJECT (basesink,
               "peer or we are not live, don't care about latency");
@@ -727,6 +731,7 @@ gst_base_audio_sink_setcaps (GstBaseSink * bsink, GstCaps * caps)
   GstBaseAudioSink *sink = GST_BASE_AUDIO_SINK (bsink);
   GstRingBufferSpec *spec;
   GstClockTime now;
+  GstClockTime crate_num, crate_denom;
 
   if (!sink->ringbuffer)
     return FALSE;
@@ -764,6 +769,13 @@ gst_base_audio_sink_setcaps (GstBaseSink * bsink, GstCaps * caps)
     GST_DEBUG_OBJECT (sink, "activate ringbuffer");
     gst_ring_buffer_activate (sink->ringbuffer, TRUE);
   }
+
+  /* due to possible changes in the spec file we should recalibrate the clock */
+  gst_clock_get_calibration (sink->provided_clock, NULL, NULL,
+      &crate_num, &crate_denom);
+  gst_clock_set_calibration (sink->provided_clock,
+      gst_clock_get_internal_time (sink->provided_clock), now, crate_num,
+      crate_denom);
 
   /* calculate actual latency and buffer times.
    * FIXME: In 0.11, store the latency_time internally in ns */
@@ -1320,7 +1332,8 @@ flushing:
 }
 
 static gint64
-gst_base_audio_sink_get_alignment (GstBaseAudioSink * sink, GstClockTime sample_offset)
+gst_base_audio_sink_get_alignment (GstBaseAudioSink * sink,
+    GstClockTime sample_offset)
 {
   GstRingBuffer *ringbuf = sink->ringbuffer;
   gint64 align;
@@ -1355,14 +1368,14 @@ gst_base_audio_sink_get_alignment (GstBaseAudioSink * sink, GstClockTime sample_
         G_GINT64_FORMAT, align, maxdrift);
   } else {
     /* calculate sample diff in seconds for error message */
-    gint64 diff_s = gst_util_uint64_scale_int (diff, GST_SECOND, ringbuf->spec.rate);
+    gint64 diff_s = gst_util_uint64_scale_int (diff, GST_SECOND,
+        ringbuf->spec.rate);
     /* timestamps drifted apart from previous samples too much, we need to
      * resync. We log this as an element warning. */
     GST_WARNING_OBJECT (sink,
         "Unexpected discontinuity in audio timestamps of "
         "%s%" GST_TIME_FORMAT ", resyncing",
-        sample_offset > sink->next_sample ? "+" : "-",
-        GST_TIME_ARGS (diff_s));
+        sample_offset > sink->next_sample ? "+" : "-", GST_TIME_ARGS (diff_s));
     align = 0;
   }
 
@@ -1375,6 +1388,7 @@ gst_base_audio_sink_render (GstBaseSink * bsink, GstBuffer * buf)
   guint64 in_offset;
   GstClockTime time, stop, render_start, render_stop, sample_offset;
   GstClockTimeDiff sync_offset, ts_offset;
+  GstBaseAudioSinkClass *bclass;
   GstBaseAudioSink *sink;
   GstRingBuffer *ringbuf;
   gint64 diff, align, ctime, cstop;
@@ -1390,8 +1404,10 @@ gst_base_audio_sink_render (GstBaseSink * bsink, GstBuffer * buf)
   GstFlowReturn ret;
   GstSegment clip_seg;
   gint64 time_offset;
+  GstBuffer *out = NULL;
 
   sink = GST_BASE_AUDIO_SINK (bsink);
+  bclass = GST_BASE_AUDIO_SINK_GET_CLASS (sink);
 
   ringbuf = sink->ringbuffer;
 
@@ -1413,6 +1429,17 @@ gst_base_audio_sink_render (GstBaseSink * bsink, GstBuffer * buf)
     sink->priv->sync_latency = FALSE;
   } else {
     GST_OBJECT_UNLOCK (sink);
+  }
+
+  /* Before we go on, let's see if we need to payload the data. If yes, we also
+   * need to unref the output buffer before leaving. */
+  if (bclass->payload) {
+    out = bclass->payload (sink, buf);
+
+    if (!out)
+      goto payload_failed;
+
+    buf = out;
   }
 
   bps = ringbuf->spec.bytes_per_sample;
@@ -1591,6 +1618,12 @@ gst_base_audio_sink_render (GstBaseSink * bsink, GstBuffer * buf)
       render_stop = 0;
   }
 
+  /* in some clock slaving cases, all late samples end up at 0 first,
+   * and subsequent ones align with that until threshold exceeded,
+   * and then sync back to 0 and so on, so avoid that altogether */
+  if (G_UNLIKELY (render_start == 0 && render_stop == 0))
+    goto too_late;
+
   /* and bring the time to the rate corrected offset in the buffer */
   render_start = gst_util_uint64_scale_int (render_start,
       ringbuf->spec.rate, GST_SECOND);
@@ -1697,7 +1730,13 @@ no_sync:
     gst_ring_buffer_start (ringbuf);
   }
 
-  return GST_FLOW_OK;
+  ret = GST_FLOW_OK;
+
+done:
+  if (out)
+    gst_buffer_unref (out);
+
+  return ret;
 
   /* SPECIAL cases */
 out_of_segment:
@@ -1706,32 +1745,46 @@ out_of_segment:
         "dropping sample out of segment time %" GST_TIME_FORMAT ", start %"
         GST_TIME_FORMAT, GST_TIME_ARGS (time),
         GST_TIME_ARGS (bsink->segment.start));
+    ret = GST_FLOW_OK;
+    goto done;
+  }
+too_late:
+  {
+    GST_DEBUG_OBJECT (sink, "dropping late sample");
     return GST_FLOW_OK;
   }
   /* ERRORS */
+payload_failed:
+  {
+    GST_ELEMENT_ERROR (sink, STREAM, FORMAT, (NULL), ("failed to payload."));
+    ret = GST_FLOW_ERROR;
+    goto done;
+  }
 wrong_state:
   {
     GST_DEBUG_OBJECT (sink, "ringbuffer not negotiated");
     GST_ELEMENT_ERROR (sink, STREAM, FORMAT, (NULL), ("sink not negotiated."));
-    return GST_FLOW_NOT_NEGOTIATED;
+    ret = GST_FLOW_NOT_NEGOTIATED;
+    goto done;
   }
 wrong_size:
   {
     GST_DEBUG_OBJECT (sink, "wrong size");
     GST_ELEMENT_ERROR (sink, STREAM, WRONG_TYPE,
         (NULL), ("sink received buffer of wrong size."));
-    return GST_FLOW_ERROR;
+    ret = GST_FLOW_ERROR;
+    goto done;
   }
 stopping:
   {
     GST_DEBUG_OBJECT (sink, "preroll got interrupted: %d (%s)", ret,
         gst_flow_get_name (ret));
-    return ret;
+    goto done;
   }
 sync_latency_failed:
   {
     GST_DEBUG_OBJECT (sink, "failed waiting for latency");
-    return ret;
+    goto done;
   }
 }
 

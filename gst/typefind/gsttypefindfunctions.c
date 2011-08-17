@@ -1014,6 +1014,7 @@ mp3_type_find_at_offset (GstTypeFind * tf, guint64 start_off,
       guint layer = 0, bitrate, samplerate, channels;
       guint found = 0;          /* number of valid headers found */
       guint64 offset = skipped;
+      gboolean changed = FALSE;
 
       while (found < GST_MP3_TYPEFIND_TRY_HEADERS) {
         guint32 head;
@@ -1064,6 +1065,8 @@ mp3_type_find_at_offset (GstTypeFind * tf, guint64 start_off,
            * that this is not a mp3 but just a random bytestream. It could
            * be a freaking funky encoded mp3 though. We'll just not count
            * this header*/
+          if (prev_layer)
+            changed = TRUE;
           prev_layer = layer;
           prev_channels = channels;
           prev_samplerate = samplerate;
@@ -1094,6 +1097,8 @@ mp3_type_find_at_offset (GstTypeFind * tf, guint64 start_off,
           probability = GST_TYPE_FIND_MINIMUM;
         if (start_off > 0)
           probability /= 2;
+        if (!changed)
+          probability = (probability + GST_TYPE_FIND_MAXIMUM) / 2;
 
         GST_INFO
             ("audio/mpeg calculated %u  =  %u  *  %u / %u  *  (%u - %"
@@ -4007,6 +4012,61 @@ windows_icon_typefind (GstTypeFind * find, gpointer user_data)
       "image/x-icon", NULL);
 }
 
+/*** WAP WBMP typefinder ***/
+
+static void
+wbmp_typefind (GstTypeFind * find, gpointer user_data)
+{
+  guint8 *data;
+  gint64 datalen;
+  guint w, h, size;
+
+  /* http://en.wikipedia.org/wiki/Wireless_Application_Protocol_Bitmap_Format */
+  datalen = gst_type_find_get_length (find);
+  if (datalen == 0)
+    return;
+
+  data = gst_type_find_peek (find, 0, 5);
+  if (data == NULL)
+    return;
+
+  /* want 0x00 0x00 at start */
+  if (*data++ != 0 || *data++ != 0)
+    return;
+
+  /* min header size */
+  size = 4;
+
+  /* let's assume max width/height is 65536 */
+  w = *data++;
+  if ((w & 0x80)) {
+    w = (w << 8) | *data++;
+    if ((w & 0x80))
+      return;
+    ++size;
+    data = gst_type_find_peek (find, 4, 2);
+    if (data == NULL)
+      return;
+  }
+  h = *data++;
+  if ((h & 0x80)) {
+    h = (h << 8) | *data++;
+    if ((h & 0x80))
+      return;
+    ++size;
+  }
+
+  if (w == 0 || h == 0)
+    return;
+
+  /* now add bitmap size */
+  size += h * (GST_ROUND_UP_8 (w) / 8);
+
+  if (datalen == size) {
+    gst_type_find_suggest_simple (find, GST_TYPE_FIND_POSSIBLE - 10,
+        "image/vnd.wap.wbmp", NULL);
+  }
+}
 
 /*** DEGAS Atari images (also to avoid false positives, see #625129) ***/
 static void
@@ -4023,6 +4083,8 @@ degas_type_find (GstTypeFind * tf, gpointer private)
   if (len < 34)                 /* smallest header of the lot */
     return;
   data = gst_type_find_peek (tf, 0, 4);
+  if (G_UNLIKELY (data == NULL))
+    return;
   resolution = GST_READ_UINT16_BE (data);
   if (len == 32034) {
     /* could be DEGAS */
@@ -4033,6 +4095,8 @@ degas_type_find (GstTypeFind * tf, gpointer private)
     /* could be DEGAS Elite */
     if (resolution <= 2) {
       data = gst_type_find_peek (tf, len - 16, 8);
+      if (G_UNLIKELY (data == NULL))
+	return;
       for (n = 0; n < 4; n++) {
         if (GST_READ_UINT16_BE (data + n * 2) > 2)
           return;
@@ -4045,6 +4109,8 @@ degas_type_find (GstTypeFind * tf, gpointer private)
        it does have 4 16 bytes values near the end that are 0-2 though. */
     if ((resolution & 0x8000) && (resolution & 0x7fff) <= 2) {
       data = gst_type_find_peek (tf, len - 16, 8);
+      if (G_UNLIKELY (data == NULL))
+	return;
       for (n = 0; n < 4; n++) {
         if (GST_READ_UINT16_BE (data + n * 2) > 2)
           return;
@@ -4504,7 +4570,7 @@ plugin_init (GstPlugin * plugin)
   TYPE_FIND_REGISTER_START_WITH (plugin, "audio/x-vgm",
       GST_RANK_SECONDARY, vgm_exts, "Vgm\x20", 4, GST_TYPE_FIND_MAXIMUM);
   TYPE_FIND_REGISTER_START_WITH (plugin, "audio/x-sap",
-      GST_RANK_SECONDARY, sap_exts, "SAP\x0d\x0aAUTHOR\x20", 12,
+      GST_RANK_SECONDARY, sap_exts, "SAP\x0d\x0a" "AUTHOR\x20", 12,
       GST_TYPE_FIND_MAXIMUM);
   TYPE_FIND_REGISTER_START_WITH (plugin, "video/x-ivf", GST_RANK_SECONDARY,
       ivf_exts, "DKIF", 4, GST_TYPE_FIND_NEARLY_CERTAIN);
@@ -4522,6 +4588,8 @@ plugin_init (GstPlugin * plugin)
   TYPE_FIND_REGISTER_START_WITH (plugin, "image/vnd.adobe.photoshop",
       GST_RANK_SECONDARY, psd_exts, "8BPS\000\001\000\000\000\000", 10,
       GST_TYPE_FIND_LIKELY);
+  TYPE_FIND_REGISTER (plugin, "image/vnd.wap.wbmp", GST_RANK_MARGINAL,
+      wbmp_typefind, NULL, NULL, NULL, NULL);
   TYPE_FIND_REGISTER_START_WITH (plugin, "application/x-yuv4mpeg",
       GST_RANK_SECONDARY, y4m_exts, "YUV4MPEG2 ", 10, GST_TYPE_FIND_LIKELY);
   TYPE_FIND_REGISTER (plugin, "image/x-icon", GST_RANK_MARGINAL,

@@ -191,7 +191,11 @@ enum
   PROP_WINDOW_HEIGHT
 };
 
-static GstVideoSinkClass *parent_class = NULL;
+static void gst_xvimagesink_init_interfaces (GType type);
+
+GST_BOILERPLATE_FULL (GstXvImageSink, gst_xvimagesink, GstVideoSink,
+    GST_TYPE_VIDEO_SINK, gst_xvimagesink_init_interfaces);
+
 
 /* ============================================================= */
 /*                                                               */
@@ -558,16 +562,23 @@ gst_xvimagesink_xvimage_new (GstXvImageSink * xvimagesink, GstCaps * caps)
         xvimage->width, xvimage->height, &xvimage->SHMInfo);
     if (!xvimage->xvimage || error_caught) {
       g_mutex_unlock (xvimagesink->x_lock);
-      /* Reset error handler */
+
+      /* Reset error flag */
       error_caught = FALSE;
-      XSetErrorHandler (handler);
-      /* Push an error */
-      GST_ELEMENT_ERROR (xvimagesink, RESOURCE, WRITE,
+
+      /* Push a warning */
+      GST_ELEMENT_WARNING (xvimagesink, RESOURCE, WRITE,
           ("Failed to create output image buffer of %dx%d pixels",
               xvimage->width, xvimage->height),
           ("could not XvShmCreateImage a %dx%d image",
               xvimage->width, xvimage->height));
-      goto beach_unlocked;
+
+      /* Retry without XShm */
+      xvimagesink->xcontext->use_xshm = FALSE;
+
+      /* Hold X mutex again to try without XShm */
+      g_mutex_lock (xvimagesink->x_lock);
+      goto no_xshm;
     }
 
     /* we have to use the returned data_size for our shm size */
@@ -676,6 +687,7 @@ gst_xvimagesink_xvimage_new (GstXvImageSink * xvimagesink, GstCaps * caps)
     GST_DEBUG_OBJECT (xvimagesink, "XServer ShmAttached to 0x%x, id 0x%lx",
         xvimage->SHMInfo.shmid, xvimage->SHMInfo.shmseg);
   } else
+  no_xshm:
 #endif /* HAVE_XSHM */
   {
     xvimage->xvimage = XvCreateImage (xvimagesink->xcontext->disp,
@@ -1889,8 +1901,8 @@ gst_xvimagesink_xcontext_get (GstXvImageSink * xvimagesink)
 
       channel = g_object_new (GST_TYPE_COLOR_BALANCE_CHANNEL, NULL);
       channel->label = g_strdup (channels[i]);
-      channel->min_value = matching_attr ? matching_attr->min_value : -1000;
-      channel->max_value = matching_attr ? matching_attr->max_value : 1000;
+      channel->min_value = matching_attr->min_value;
+      channel->max_value = matching_attr->max_value;
 
       xcontext->channels_list = g_list_append (xcontext->channels_list,
           channel);
@@ -2718,9 +2730,11 @@ no_caps:
 static gboolean
 gst_xvimagesink_interface_supported (GstImplementsInterface * iface, GType type)
 {
-  g_assert (type == GST_TYPE_NAVIGATION || type == GST_TYPE_X_OVERLAY ||
-      type == GST_TYPE_COLOR_BALANCE || type == GST_TYPE_PROPERTY_PROBE);
-  return TRUE;
+  if (type == GST_TYPE_NAVIGATION || type == GST_TYPE_X_OVERLAY ||
+      type == GST_TYPE_COLOR_BALANCE || type == GST_TYPE_PROPERTY_PROBE)
+    return TRUE;
+  else
+    return FALSE;
 }
 
 static void
@@ -3471,7 +3485,8 @@ gst_xvimagesink_finalize (GObject * object)
 }
 
 static void
-gst_xvimagesink_init (GstXvImageSink * xvimagesink)
+gst_xvimagesink_init (GstXvImageSink * xvimagesink,
+    GstXvImageSinkClass * xvimagesinkclass)
 {
   xvimagesink->display_name = NULL;
   xvimagesink->adaptor_no = 0;
@@ -3537,8 +3552,6 @@ gst_xvimagesink_class_init (GstXvImageSinkClass * klass)
   gstelement_class = (GstElementClass *) klass;
   gstbasesink_class = (GstBaseSinkClass *) klass;
   videosink_class = (GstVideoSinkClass *) klass;
-
-  parent_class = g_type_class_peek_parent (klass);
 
   gobject_class->set_property = gst_xvimagesink_set_property;
   gobject_class->get_property = gst_xvimagesink_get_property;
@@ -3696,71 +3709,48 @@ gst_xvimagesink_class_init (GstXvImageSinkClass * klass)
 /*          Object typing & Creation           */
 /*                                             */
 /* =========================================== */
-
-GType
-gst_xvimagesink_get_type (void)
+static void
+gst_xvimagesink_init_interfaces (GType type)
 {
-  static GType xvimagesink_type = 0;
+  static const GInterfaceInfo iface_info = {
+    (GInterfaceInitFunc) gst_xvimagesink_interface_init,
+    NULL,
+    NULL,
+  };
+  static const GInterfaceInfo navigation_info = {
+    (GInterfaceInitFunc) gst_xvimagesink_navigation_init,
+    NULL,
+    NULL,
+  };
+  static const GInterfaceInfo overlay_info = {
+    (GInterfaceInitFunc) gst_xvimagesink_xoverlay_init,
+    NULL,
+    NULL,
+  };
+  static const GInterfaceInfo colorbalance_info = {
+    (GInterfaceInitFunc) gst_xvimagesink_colorbalance_init,
+    NULL,
+    NULL,
+  };
+  static const GInterfaceInfo propertyprobe_info = {
+    (GInterfaceInitFunc) gst_xvimagesink_property_probe_interface_init,
+    NULL,
+    NULL,
+  };
 
-  if (!xvimagesink_type) {
-    static const GTypeInfo xvimagesink_info = {
-      sizeof (GstXvImageSinkClass),
-      gst_xvimagesink_base_init,
-      NULL,
-      (GClassInitFunc) gst_xvimagesink_class_init,
-      NULL,
-      NULL,
-      sizeof (GstXvImageSink),
-      0,
-      (GInstanceInitFunc) gst_xvimagesink_init,
-    };
-    static const GInterfaceInfo iface_info = {
-      (GInterfaceInitFunc) gst_xvimagesink_interface_init,
-      NULL,
-      NULL,
-    };
-    static const GInterfaceInfo navigation_info = {
-      (GInterfaceInitFunc) gst_xvimagesink_navigation_init,
-      NULL,
-      NULL,
-    };
-    static const GInterfaceInfo overlay_info = {
-      (GInterfaceInitFunc) gst_xvimagesink_xoverlay_init,
-      NULL,
-      NULL,
-    };
-    static const GInterfaceInfo colorbalance_info = {
-      (GInterfaceInitFunc) gst_xvimagesink_colorbalance_init,
-      NULL,
-      NULL,
-    };
-    static const GInterfaceInfo propertyprobe_info = {
-      (GInterfaceInitFunc) gst_xvimagesink_property_probe_interface_init,
-      NULL,
-      NULL,
-    };
-    xvimagesink_type = g_type_register_static (GST_TYPE_VIDEO_SINK,
-        "GstXvImageSink", &xvimagesink_info, 0);
+  g_type_add_interface_static (type,
+      GST_TYPE_IMPLEMENTS_INTERFACE, &iface_info);
+  g_type_add_interface_static (type, GST_TYPE_NAVIGATION, &navigation_info);
+  g_type_add_interface_static (type, GST_TYPE_X_OVERLAY, &overlay_info);
+  g_type_add_interface_static (type, GST_TYPE_COLOR_BALANCE,
+      &colorbalance_info);
+  g_type_add_interface_static (type, GST_TYPE_PROPERTY_PROBE,
+      &propertyprobe_info);
 
-    g_type_add_interface_static (xvimagesink_type,
-        GST_TYPE_IMPLEMENTS_INTERFACE, &iface_info);
-    g_type_add_interface_static (xvimagesink_type, GST_TYPE_NAVIGATION,
-        &navigation_info);
-    g_type_add_interface_static (xvimagesink_type, GST_TYPE_X_OVERLAY,
-        &overlay_info);
-    g_type_add_interface_static (xvimagesink_type, GST_TYPE_COLOR_BALANCE,
-        &colorbalance_info);
-    g_type_add_interface_static (xvimagesink_type, GST_TYPE_PROPERTY_PROBE,
-        &propertyprobe_info);
-
-
-    /* register type and create class in a more safe place instead of at
-     * runtime since the type registration and class creation is not
-     * threadsafe. */
-    g_type_class_ref (gst_xvimage_buffer_get_type ());
-  }
-
-  return xvimagesink_type;
+  /* register type and create class in a more safe place instead of at
+   * runtime since the type registration and class creation is not
+   * threadsafe. */
+  g_type_class_ref (gst_xvimage_buffer_get_type ());
 }
 
 static gboolean

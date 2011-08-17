@@ -55,7 +55,7 @@ plug-ins.
 export DOCS_ARE_INCOMPLETE_PLEASE_FIXME=0
 %build
 %configure \
-  --enable-gtk-doc --enable-introspection=no
+  --enable-gtk-doc --enable-introspection=yes
 
 make %{?_smp_mflags}
                                                                                 
@@ -114,7 +114,6 @@ rm -rf $RPM_BUILD_ROOT
 %{_libdir}/gstreamer-%{majorminor}/libgstvideorate.so
 %{_libdir}/gstreamer-%{majorminor}/libgstvideoscale.so
 %{_libdir}/gstreamer-%{majorminor}/libgsttcp.so
-%{_libdir}/gstreamer-%{majorminor}/libgstvideo4linux.so
 %{_libdir}/gstreamer-%{majorminor}/libgstaudioresample.so
 %{_libdir}/gstreamer-%{majorminor}/libgstaudiotestsrc.so
 %{_libdir}/gstreamer-%{majorminor}/libgstgdp.so
@@ -223,7 +222,7 @@ GStreamer Plugins Base library development and header files.
 %{_includedir}/gstreamer-%{majorminor}/gst/pbutils/gstdiscoverer.h
 %{_includedir}/gstreamer-%{majorminor}/gst/pbutils/gstpluginsbaseversion.h
 %{_includedir}/gstreamer-%{majorminor}/gst/tag/xmpwriter.h
-
+%{_includedir}/gstreamer-%{majorminor}/gst/audio/gstaudioiec61937.h
 
 %{_libdir}/libgstfft-%{majorminor}.so
 %{_libdir}/libgstrtsp-%{majorminor}.so
@@ -255,6 +254,31 @@ GStreamer Plugins Base library development and header files.
 %{_libdir}/pkgconfig/gstreamer-tag-%{majorminor}.pc
 %{_libdir}/pkgconfig/gstreamer-video-%{majorminor}.pc
 %{_libdir}/pkgconfig/gstreamer-app-%{majorminor}.pc
+
+%{_libdir}/girepository-1.0/GstApp-0.10.typelib
+%{_libdir}/girepository-1.0/GstAudio-0.10.typelib
+%{_libdir}/girepository-1.0/GstFft-0.10.typelib
+%{_libdir}/girepository-1.0/GstInterfaces-0.10.typelib
+%{_libdir}/girepository-1.0/GstNetbuffer-0.10.typelib
+%{_libdir}/girepository-1.0/GstPbutils-0.10.typelib
+%{_libdir}/girepository-1.0/GstRiff-0.10.typelib
+%{_libdir}/girepository-1.0/GstRtp-0.10.typelib
+%{_libdir}/girepository-1.0/GstRtsp-0.10.typelib
+%{_libdir}/girepository-1.0/GstSdp-0.10.typelib
+%{_libdir}/girepository-1.0/GstTag-0.10.typelib
+%{_libdir}/girepository-1.0/GstVideo-0.10.typelib
+%{_datadir}/gir-1.0/GstApp-0.10.gir
+%{_datadir}/gir-1.0/GstAudio-0.10.gir
+%{_datadir}/gir-1.0/GstFft-0.10.gir
+%{_datadir}/gir-1.0/GstInterfaces-0.10.gir
+%{_datadir}/gir-1.0/GstNetbuffer-0.10.gir
+%{_datadir}/gir-1.0/GstPbutils-0.10.gir
+%{_datadir}/gir-1.0/GstRiff-0.10.gir
+%{_datadir}/gir-1.0/GstRtp-0.10.gir
+%{_datadir}/gir-1.0/GstRtsp-0.10.gir
+%{_datadir}/gir-1.0/GstSdp-0.10.gir
+%{_datadir}/gir-1.0/GstTag-0.10.gir
+%{_datadir}/gir-1.0/GstVideo-0.10.gir
 
 # gtk-doc documentation
 %doc %{_datadir}/gtk-doc/html/gst-plugins-base-libs-%{majorminor}
